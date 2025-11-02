@@ -1,0 +1,166 @@
+fig, ax = ox.plot_graph(
+    graph,
+    bgcolor="#2B2A2A",
+    node_size=0,
+    edge_color=road_color,
+    edge_linewidth=road_thickness,
+    show=False,
+    close=False)
+
+fig.patch.set_facecolor("#2B2A2A")
+ax.set_facecolor("#2B2A2A")
+
+edgeLines = []
+for u, v, data in graph.edges(data=True):
+    if 'geometry' in data:
+        xs, ys = data['geometry'].xy
+    else:
+        xs = (graph.nodes[u]['x'], graph.nodes[v]['x'])
+        ys = (graph.nodes[u]['y'], graph.nodes[v]['y'])
+    edgeLines.append(list(zip(xs, ys)))
+baseCollection = LineCollection(edgeLines, colors=road_color, linewidths=road_thickness, alpha=0.45)
+ax.add_collection(baseCollection)
+
+waveMain = LineCollection([], colors=wave_color, linewidths=1.0, alpha=wave_main_alpha, zorder=4)
+ax.add_collection(waveMain)
+finalMain = LineCollection([], colors=path_color, linewidths=2.2, alpha=1.0, zorder=6)
+ax.add_collection(finalMain)
+
+startX, startY = graph.nodes[startNode]['x'], graph.nodes[startNode]['y']
+endX, endY     = graph.nodes[endNode]['x'], graph.nodes[endNode]['y']
+ax.scatter(startX, startY, s=90, color=node_color, zorder=8, alpha=0.95)
+ax.scatter(endX, endY, s=90, color=node_color, zorder=8, alpha=0.95)
+
+hudWidth  = 0.32  
+hudHeight = 0.17
+hudX = 0.03       
+hudY = 0.80       
+
+# translucent rectangular background
+hud_patch = Rectangle(
+    (hudX, hudY),
+    hudWidth, hudHeight,
+    transform=ax.transAxes,
+    facecolor=(0.02, 0.02, 0.02, 0.66),  
+    edgecolor=wave_color,
+    linewidth=0.8,
+    zorder=20)
+ax.add_patch(hud_patch)
+
+ax.text(
+    hudX + 0.015, hudY + hudHeight - 0.02,
+    "GEBZE PATHFINDER <3",
+    transform=ax.transAxes,
+    va='top', ha='left',
+    family='monospace',
+    fontsize=8,
+    color=wave_color,
+    fontweight='bold',
+    zorder=21)
+
+hud_text = ax.text(
+    hudX + 0.015, hudY + hudHeight - 0.06, "",
+    transform=ax.transAxes,
+    va='top', ha='left',
+    family='monospace',
+    fontsize=6.5,
+    color=wave_color,
+    zorder=21)
+
+edge_segment_coords = []
+for (u, v) in visitedEdges:
+    data = graph[u][v][0] if 0 in graph[u][v] else graph[u][v]
+    if 'geometry' in data:
+        xs, ys = data['geometry'].xy
+    else:
+        xs = (graph.nodes[u]['x'], graph.nodes[v]['x'])
+        ys = (graph.nodes[u]['y'], graph.nodes[v]['y'])
+    edge_segment_coords.append(list(zip(xs, ys)))
+
+path_segment_coords = []
+for (u, v) in pathEdges:
+    data = graph[u][v][0] if 0 in graph[u][v] else graph[u][v]
+    if 'geometry' in data:
+        xs, ys = data['geometry'].xy
+    else:
+        xs = (graph.nodes[u]['x'], graph.nodes[v]['x'])
+        ys = (graph.nodes[u]['y'], graph.nodes[v]['y'])
+    path_segment_coords.append(list(zip(xs, ys)))
+
+explored_segments = []
+
+def update(frame):
+    start_index = frame * skip
+    added = 0
+    while start_index + added < len(edge_segment_coords) and added < skip:
+        explored_segments.append(edge_segment_coords[start_index + added])
+        added += 1
+
+    waveMain.set_segments(explored_segments)
+
+
+    edges_done = min(len(edge_segment_coords), (frame + 1) * skip)
+    nodes_done = set()
+    for i in range(edges_done):
+        u, v = visitedEdges[i]
+        nodes_done.add(u); nodes_done.add(v)
+    if edges_done > 0:
+        u, v = visitedEdges[min(edges_done - 1, len(visitedEdges) - 1)]
+        ux, uy = graph.nodes[u]['x'], graph.nodes[u]['y']
+        vx, vy = graph.nodes[v]['x'], graph.nodes[v]['y']
+        mid_lon = (ux + vx) / 2
+        mid_lat = (uy + vy) / 2
+        coord_str = f"{mid_lat:.5f}, {mid_lon:.5f}"
+    else:
+        coord_str = "--, --"
+
+    hudInfo = (
+        f"Nodes explored = {len(nodes_done)}\n"
+        f"Edges = {edges_done}\n"
+        f"Current: {coord_str}\n"
+        f"Start coordinates: \n{startLat:.6f}, {startLon:.6f}")
+    hud_text.set_text(hudInfo)
+
+    if start_index >= len(edge_segment_coords):
+        finalMain.set_segments(path_segment_coords)
+
+
+    return waveMain, finalMain, hud_text
+
+preview_frame = min(preview_frame_index, max(0, len(edge_segment_coords)//skip - 1))
+for f in range(preview_frame + 1):
+    update(f)
+
+fig.set_size_inches(10, 7)
+plt.axis('off')
+fig.savefig(out_preview, dpi=dpi_preview, bbox_inches='tight', pad_inches=0.02)
+display(Image(out_preview))
+
+explored_segments.clear()
+hud_text.set_text("")
+
+fig.patch.set_facecolor("#2B2A2A")
+ax.set_facecolor("#2B2A2A")
+
+plt.rcParams['figure.facecolor'] = "#2B2A2A"
+plt.rcParams['axes.facecolor'] = "#2B2A2A"
+plt.rcParams['savefig.facecolor'] = "#2B2A2A"
+plt.rcParams['savefig.edgecolor'] = "#2B2A2A"
+plt.rcParams['animation.ffmpeg_args'] = ['-vf', 'format=yuv420p', '-pix_fmt', 'yuv420p']
+
+frameCount = (len(edge_segment_coords) // skip) + 40
+anim = animation.FuncAnimation(
+    fig,
+    update,
+    frames=frameCount,
+    interval=20,
+    blit=True)
+
+fig.patch.set_facecolor("#2B2A2A")
+ax.set_facecolor("#2B2A2A")
+
+Writer = animation.writers['ffmpeg']
+writer = Writer(fps=fps, metadata=dict(artist='VOLT'), bitrate=4000)
+
+anim.save(out_video, writer=writer, dpi=dpi_video)
+fig.savefig(out_preview, dpi=dpi_preview, bbox_inches='tight', pad_inches=0.02, facecolor="#2B2A2A")
