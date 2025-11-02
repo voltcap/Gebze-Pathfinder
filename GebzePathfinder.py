@@ -1,3 +1,5 @@
+#here you can customise the visual elements and add the info you want to the HUD 
+
 fig, ax = ox.plot_graph(
     graph,
     bgcolor="#2B2A2A",
@@ -36,8 +38,7 @@ hudHeight = 0.17
 hudX = 0.03       
 hudY = 0.80       
 
-# translucent rectangular background
-hud_patch = Rectangle(
+hudBox = Rectangle(
     (hudX, hudY),
     hudWidth, hudHeight,
     transform=ax.transAxes,
@@ -45,7 +46,7 @@ hud_patch = Rectangle(
     edgecolor=wave_color,
     linewidth=0.8,
     zorder=20)
-ax.add_patch(hud_patch)
+ax.add_patch(hudBox)
 
 ax.text(
     hudX + 0.015, hudY + hudHeight - 0.02,
